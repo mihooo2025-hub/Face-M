@@ -1,0 +1,65 @@
+name: Facebook Sports News Drafts
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: facebook-news-forwarder
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run news forwarder
+        env:
+          WP_SITE_URL: ${{ secrets.WP_SITE_URL }}
+          WP_USERNAME: ${{ secrets.WP_USERNAME }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
+          GEMINI_API_KEY_FALLBACK: ${{ secrets.GEMINI_API_KEY_FALLBACK }}
+
+          FACEBOOK_ACCESS_TOKEN: ${{ secrets.FACEBOOK_ACCESS_TOKEN }}
+          FACEBOOK_GRAPH_VERSION: ${{ secrets.FACEBOOK_GRAPH_VERSION }}
+
+        run: python main.py
+
+      - name: Commit state
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add data/state.json
+
+          if git diff --cached --quiet; then
+            echo "No state changes to commit."
+          else
+            git commit -m "chore: update news bot state"
+            git push
+          fi
